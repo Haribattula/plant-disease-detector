@@ -1,19 +1,21 @@
-
-import streamlit as st
-
-st.set_page_config(page_title="Plant Disease Detection", layout="centered")
-from flask import Flask, render_template, request
-from markupsafe import Markup
-import torch
-import io
-from torchvision import transforms
-from PIL import Image
-from utils.disease import disease_dic
-from utils.model import ResNet9
 import os
 os.environ["STREAMLIT_HOME"] = "/tmp"
+os.environ["XDG_CONFIG_HOME"] = "/tmp"
+os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+os.environ["STREAMLIT_USAGE_STATS"] = "false"
 
-# Load Plant Disease Model
+import streamlit as st
+import torch
+from torchvision import transforms
+from PIL import Image
+import io
+from utils.model import ResNet9
+from utils.disease import disease_dic
+
+st.set_page_config(page_title="Plant Disease Detection", layout="centered")
+st.title("🌿 Plant Disease Detection App")
+
+# Disease classes
 disease_classes = ['Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust',
                    'Apple___healthy', 'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew',
                    'Cherry_(including_sour)___healthy', 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot',
@@ -28,48 +30,32 @@ disease_classes = ['Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_app
                    'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
                    'Tomato___healthy']
 
+# Load model
 disease_model_path = 'Code/models/plant_disease_model.pth'
-disease_model = ResNet9(3, len(disease_classes))
-disease_model.load_state_dict(torch.load(disease_model_path, map_location=torch.device('cpu')))
-disease_model.eval()
+model = ResNet9(3, len(disease_classes))
+model.load_state_dict(torch.load(disease_model_path, map_location=torch.device('cpu')))
+model.eval()
 
-# Function to Predict Disease
-def predict_image(img, model=disease_model):
+# Prediction function
+def predict(img):
     transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.ToTensor(),
+        transforms.Resize((256, 256)),
+        transforms.ToTensor()
     ])
     image = Image.open(io.BytesIO(img))
-    img_t = transform(image)
-    img_u = torch.unsqueeze(img_t, 0)
-    yb = model(img_u)
-    _, preds = torch.max(yb, dim=1)
-    prediction = disease_classes[preds[0].item()]
-    return prediction
+    img_t = transform(image).unsqueeze(0)
+    output = model(img_t)
+    _, pred = torch.max(output, 1)
+    return disease_classes[pred.item()]
 
-# Flask App Initialization
-app = Flask(__name__)
+# Upload and predict
+uploaded_file = st.file_uploader("Upload a plant leaf image...", type=['jpg', 'png', 'jpeg'])
 
-@app.route('/')
-def home():
-    return render_template('index.html', title='Plant Disease - Home')
-
-@app.route('/disease-predict', methods=['GET', 'POST'])
-def disease_prediction():
-    if request.method == 'POST':
-        if 'file' not in request.files:
-            return render_template('disease.html', title='Plant - Disease Detection')
-        file = request.files.get('file')
-        if not file:
-            return render_template('disease.html', title='Plant - Disease Detection')
-        try:
-            img = file.read()
-            prediction = predict_image(img)
-            prediction = Markup(str(disease_dic[prediction]))
-            return render_template('disease-result.html', prediction=prediction, title='Plant - Disease Detection')
-        except:
-            pass
-    return render_template('disease.html', title='Plant - Disease Detection')
-
-if __name__ == '__main__':
-    app.run(debug=False)
+if uploaded_file is not None:
+    image_bytes = uploaded_file.read()
+    st.image(image_bytes, caption="Uploaded Leaf Image", use_column_width=True)
+    with st.spinner("Predicting..."):
+        label = predict(image_bytes)
+        description = disease_dic.get(label, "No description available.")
+        st.success(f"**Prediction:** {label}")
+        st.markdown(f"**Details:** {description}")
