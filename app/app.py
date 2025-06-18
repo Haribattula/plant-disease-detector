@@ -1,3 +1,7 @@
+
+import streamlit as st
+
+st.set_page_config(page_title="Plant Disease Detection", layout="centered")
 from flask import Flask, render_template, request
 from markupsafe import Markup
 import torch
@@ -6,6 +10,8 @@ from torchvision import transforms
 from PIL import Image
 from utils.disease import disease_dic
 from utils.model import ResNet9
+import os
+os.environ["STREAMLIT_HOME"] = "/tmp"
 
 # Load Plant Disease Model
 disease_classes = ['Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust',
